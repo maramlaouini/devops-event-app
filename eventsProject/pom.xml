@@ -20,16 +20,17 @@
 
     <!-- Configuration Nexus -->
     <distributionManagement>
+    <snapshotRepository>
+        <id>nexus-snapshots</id>
+        <url>http://10.0.2.15:8081/repository/maven-snapshots/</url>
+    </snapshotRepository>
+
     <repository>
-        <id>nexus</id>
+        <id>nexus-releases</id>
         <url>http://10.0.2.15:8081/repository/maven-releases/</url>
     </repository>
+</distributionManagement>
 
-    <snapshotRepository>
-        <id>nexus</id>
-        <url>http://http://10.0.2.15:8081/repository/maven-snapshots/</url>
-    </snapshotRepository>
-    </distributionManagement>
 
     <properties>
         <java.version>17</java.version>
