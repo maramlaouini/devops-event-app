@@ -1,41 +1,86 @@
-version: "3.8"
-
 services:
-  # ------------------------------------
-  # 1. SERVICE MySQL (Base de Données)
-  # ------------------------------------
   mysql:
-    image: mysql:8
-    container_name: mysql-db-events # Ajout d'un nom lisible
+    image: mysql:8.0
+    container_name: events-mysql
     environment:
-      # Ces valeurs DOIVENT correspondre à votre configuration Spring (application.properties/yml)
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: eventdb
-      # Ajoutez les credentials d'un utilisateur non-root (meilleure pratique)
-      MYSQL_USER: event_user
-      MYSQL_PASSWORD: event_pass
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: eventsProject
+      MYSQL_USER: eventsuser
+      MYSQL_PASSWORD: eventspass
     ports:
-      - "3307:3306" # Port externe:port interne
-    # Ajout du Healthcheck pour signaler quand le service MySQL est PRÊT à 100%
+      - "3308:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - events-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"] # Vérifie la connexion
-      interval: 10s # Vérifie toutes les 10 secondes
-      timeout: 5s   # Temps max pour la vérification
-      retries: 5    # Nombre d'essais avant d'échouer
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
-  # ------------------------------------
-  # 2. SERVICE Application Spring Boot
-  # ------------------------------------
-  app:
-    image: maram25/events-app:latest
-    container_name: events-app-service
+  events-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: events-spring-app
     ports:
-      - "8082:8080" # Port hôte 8082 -> Port conteneur 8080 (le port d'écoute de Spring)
-    # L'application DOIT utiliser le nom du service (mysql) pour la connexion
-    # (Exemple de ce que vous devriez avoir dans votre application.properties/yml)
-    # spring.datasource.url=jdbc:mysql://mysql:3306/eventdb...
-    
-    # Utilise le healthcheck du service 'mysql' pour s'assurer qu'il est VRAIMENT prêt
+      - "8090:8089"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/eventsProject?createDatabaseIfNotExist=true&useUnicode=true&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: rootpassword
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
     depends_on:
       mysql:
         condition: service_healthy
+    networks:
+      - events-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8089/events/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: events-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus_data:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - events-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: events-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - events-network
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  events-network:
+    driver: bridge
