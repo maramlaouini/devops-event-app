@@ -4,21 +4,19 @@ services:
   mysql:
     image: mysql:8.0
     container_name: mysql-events
+    command: --default-authentication-plugin=mysql_native_password
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: eventsdb
-      MYSQL_USER: user
-      MYSQL_PASSWORD: password
     ports:
       - "3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 20
 
   app:
     image: maram25/events-app:latest   # ton image exacte
@@ -27,13 +25,16 @@ services:
       - "8080:8080"
     depends_on:
       mysql:
-        condition: service_healthy           # ATTEND QUE MYSQL SOIT VRAIMENT PRÊT
+        condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/eventsdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/eventsdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&connectTimeout=30000&socketTimeout=30000
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      JAVA_OPTS: "-Xmx512m"
     restart: unless-stopped
+    # LA LIGNE MAGIQUE QUI RÉSOUT TOUT
     entrypoint: ["/bin/sh", "-c", "sleep 20 && java -jar /app.jar"]
+
 volumes:
   mysql-data:
