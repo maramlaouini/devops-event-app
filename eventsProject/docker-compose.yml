@@ -1,18 +1,41 @@
 version: "3.8"
 
 services:
-  app:
-    image: maram25/events-app:latest
-    ports:
-      - "8082:8080"
-    depends_on:
-      - mysql
-
+  # ------------------------------------
+  # 1. SERVICE MySQL (Base de Données)
+  # ------------------------------------
   mysql:
     image: mysql:8
+    container_name: mysql-db-events # Ajout d'un nom lisible
     environment:
+      # Ces valeurs DOIVENT correspondre à votre configuration Spring (application.properties/yml)
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: eventdb
+      # Ajoutez les credentials d'un utilisateur non-root (meilleure pratique)
+      MYSQL_USER: event_user
+      MYSQL_PASSWORD: event_pass
     ports:
-      - "3307:3306"
+      - "3307:3306" # Port externe:port interne
+    # Ajout du Healthcheck pour signaler quand le service MySQL est PRÊT à 100%
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"] # Vérifie la connexion
+      interval: 10s # Vérifie toutes les 10 secondes
+      timeout: 5s   # Temps max pour la vérification
+      retries: 5    # Nombre d'essais avant d'échouer
 
+  # ------------------------------------
+  # 2. SERVICE Application Spring Boot
+  # ------------------------------------
+  app:
+    image: maram25/events-app:latest
+    container_name: events-app-service
+    ports:
+      - "8082:8080" # Port hôte 8082 -> Port conteneur 8080 (le port d'écoute de Spring)
+    # L'application DOIT utiliser le nom du service (mysql) pour la connexion
+    # (Exemple de ce que vous devriez avoir dans votre application.properties/yml)
+    # spring.datasource.url=jdbc:mysql://mysql:3306/eventdb...
+    
+    # Utilise le healthcheck du service 'mysql' pour s'assurer qu'il est VRAIMENT prêt
+    depends_on:
+      mysql:
+        condition: service_healthy
